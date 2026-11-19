@@ -17,7 +17,7 @@ BC-MFA is a hardware-free step-up authentication architecture designed for untru
 ```text
 .
 ├── main.tex                              # IEEEtran master LaTeX source
-├── main.pdf                              # Compiled camera-ready PDF (10 pages)
+├── main.pdf                              # Compiled camera-ready PDF (11 pages)
 ├── references.bib                        # 40 authoritative peer-reviewed & normative citations
 ├── IEEEtran.cls                          # IEEE conference class
 ├── Proposta_TP2_Artigo_Cientifico_SSWM.md# Initial research paper proposal
