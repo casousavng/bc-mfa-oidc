@@ -1,0 +1,84 @@
+\section{Security and Threat Analysis}
+\label{sec:security_analysis}
+
+\subsection{Threat Model and Adversary Capabilities}
+We evaluate the security boundaries of BC-MFA under a host-compromise threat model mapped to the MITRE ATT\&CK taxonomy as formalized in recent phishing and credential-theft studies~\cite{lain2022phishing, lee2024beneath, lim2025phishers}. The adversary is assumed to hold unprivileged, user-space code execution on the client endpoint via drive-by downloads or spear-phishing payloads~\cite{lain2022phishing}, commanding five exploitation vectors: input logging (T1056.001) capturing keyboard/touch events; screen capture (T1113) recording desktop frames; carrier-level SIM swapping targeting telephonic factors~\cite{nahapetyan2024sms}; network-level AitM reverse proxying (T1557) mediating TLS traffic~\cite{kondracki2021catching}; and automated bot replay or bearer session-token theft (T1059, T1539)~\cite{hilbig2023protect}.
+
+We demarcate explicit epistemic limits. BC-MFA defends against commodity user-space infostealers that log keystrokes, scrape screens, and exfiltrate cached files or bearer cookies. We do \emph{not} claim defense against adversaries holding administrative kernel privileges (ring 0) or actively attaching same-privilege browser-debugging sessions (e.g., Chrome DevTools Protocol or malicious browser extensions) capable of invoking live WebCrypto handles as signing oracles, because full runtime control over the browser process undermines all purely software-based client isolation. Table~\ref{tab:security_comparison} summarizes the comparative security posture across paradigms.
+
+\begin{table*}[!t]
+\caption{Comparative Resilience of Authentication Paradigms on Untrusted Endpoints}
+\label{tab:security_comparison}
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+\textbf{Authentication Paradigm} & \textbf{Keylogger (T1056)} & \textbf{Screen Capture (T1113)} & \textbf{SIM Swapping} & \textbf{AitM Proxy (T1557)} & \textbf{Session Theft (T1539)} & \textbf{Zero Hardware} \\
+\midrule
+Static Password & No & No & Immune & No (Relayed) & No (Bearer) & Yes \\
+SMS / TOTP (RFC 6238)~\cite{rfc6238totp} & Partial (TTL) & No (Direct view) & Vulnerable (SMS) & No (Relayed) & No (Bearer) & Yes \\
+Mobile Push / Number Match~\cite{jubur2025usability} & Yes (OOB) & No (DOM prompt) & Immune & No (Relayed) & No (Bearer) & Partial (Phone) \\
+FIDO2 / WebAuthn~\cite{angelogianni2024how, w3cwebauthn3} & Yes (PubKey) & Yes (No secret) & Immune & Yes (Origin bound) & Needs DPoP/DBSC & No (Token) \\
+\textbf{BC-MFA (Proposed)} & \textbf{Yes (One-time $R_t$)} & \textbf{Yes (Blind $M_t{+}q_u$)} & \textbf{Immune (No SMS)} & \textbf{High* (Pinning+TTL)} & \textbf{High (RFC 9449)} & \textbf{Yes} \\
+\bottomrule
+\multicolumn{7}{@{}l}{\footnotesize *Mitigates automated relay/solver farms and enrolled-browser proxies via DPoP key pinning; first-contact active reverse proxies remain outside software-only scope (Section~\ref{sec:security_analysis}-D).}
+\end{tabular}%
+}
+\end{table*}
+
+\subsection{Resistance Against Input Logging, Screen Scraping, and SIM Swapping}
+BC-MFA eliminates telephonic carriers entirely, providing structural immunity to SIM swapping and SS7 interception campaigns~\cite{nahapetyan2024sms}. On compromised hosts, static passwords are suppressed and keyloggers capture only the ephemeral one-time response $R_t$, which holds zero replay utility once the 15-second challenge expires:
+\begin{equation}
+\Pr\big(R_t \text{ is valid at } t + \Delta t \;\big|\; \Delta t > \text{TTL}\big) = 0
+\label{eq:ttl}
+\end{equation}
+If the adversary captures the screen (T1113), the frame exposes only matrix $M_t$ and public anchor character $N_{ch}$. Because the identity offset $(0,0)$ is excluded from $\mathbb{Z}_4 \times \mathbb{Z}_4$, reconstructing the ordered 4-offset path requires searching the combinatorial space of distinct non-zero $|R|$-permutations over $N - 1 = 15$ valid offsets:
+\begin{equation}
+\Omega = \frac{(N - 1)!}{(N - 1 - |R|)!} = \frac{15!}{11!} = 32{,}760
+\label{eq:omega}
+\end{equation}
+Combined with the private anchor quadrant $q_u \in \{1, \dots, L\}$ ($L = 4$), the adversary's full initial hypothesis space is $|\mathcal{C}_0| = L \cdot \Omega = 4 \times 32{,}760 = 131{,}040$ candidate secrets $(q_u, \text{path})$.
+
+\subsection{Multi-Session Intersection Analysis and Monte Carlo Validation}
+A persistent host-level infostealer observing $k$ consecutive logins records pairs $\{(M_1, R_1), \dots, (M_k, R_k)\}$ to intersect consistent secrets~\cite{binbeshr2025challenge}. Crucially, we model a \emph{rational consistent adversary} who exploits the fact that the user's quadrant $q_u$ remains fixed across sessions: the attacker filters the full hypothesis space $|\mathcal{C}_0| = L \cdot \Omega = 131{,}040$ by testing each pair $(q, \text{path})$ against all $k$ sessions simultaneously. Under an i.i.d. symbol approximation where each wrong hypothesis survives an independent session with probability $(d/N)^{|R|} = (4/16)^4 = 1/256$, the expected surviving candidate set after $k$ compromised sessions is approximated by:
+\begin{equation}
+\mathbb{E}\big[|\mathcal{C}_k|\big] \approx 1 + \big(L \cdot \Omega - 1\big) \cdot \left(\frac{d}{N}\right)^{k|R|}
+\label{eq:intersection}
+\end{equation}
+For $N = 16, d = L = 4, |R| = 4$, Eq.~(\ref{eq:intersection}) predicts an i.i.d. baseline of $512.9$ candidates at $k = 1$, $3.00$ at $k = 2$, and collapse toward $1.01$ at $k = 3$.
+
+To capture exact finite-grid dependencies under balanced placement without replacement, we executed a reproducible 500-trial Monte Carlo simulation in Python (fixed PRNG \texttt{seed = 2026}, rational consistent adversary tracking $(q, \text{path})$ over $L \cdot \Omega$, publicly available at \url{https://github.com/casousavng/bc-mfa-oidc}) across $k \in \{1, 2, 3, 4\}$ sessions for three regimes: naive $(d=1, L=1)$, half-balanced $(d=2, L=2)$, and quadrant-balanced BC-MFA $(d=4, L=4)$. Because surviving candidate distributions are strongly right-skewed, Table~\ref{tab:mc_results} reports mean $\pm$ SD alongside the median, 5th percentile ($\text{P}_5$, representing worst-case attacker luck), and exact secret recovery rate $\Pr(|\mathcal{C}_k| = 1)$.
+
+\begin{table}[!t]
+\caption{500-Trial Rational-Adversary Monte Carlo Intersection Results (\texttt{seed=2026}, $(0,0)$ Excluded)}
+\label{tab:mc_results}
+\centering
+\scriptsize
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Regime ($d, L$)} & \textbf{$k$} & \textbf{Mean $\pm$ SD} & \textbf{Med. / $\text{P}_5$} & \textbf{$\Pr(|\mathcal{C}_k|{=}1)$} \\
+\midrule
+Naive ($1, 1$) & 1 & $1.00 \pm 0.00$ & 1.0 / 1 & 100.0\% \\
+\midrule
+Half-Bal. ($2, 2$) & 1 & $22.16 \pm 8.61$ & 16.0 / 8 & 0.0\% \\
+Half-Bal. ($2, 2$) & 2 & $1.51 \pm 0.98$ & 1.0 / 1 & 66.6\% \\
+Half-Bal. ($2, 2$) & 3 & $1.05 \pm 0.25$ & 1.0 / 1 & 95.2\% \\
+\midrule
+\textbf{BC-MFA ($4, 4$)} & \textbf{1} & \textbf{$579.26 \pm 161.97$} & \textbf{576.0 / 288} & \textbf{0.0\%} \\
+\textbf{BC-MFA ($4, 4$)} & \textbf{2} & \textbf{$10.44 \pm 16.31$} & \textbf{6.0 / 2} & \textbf{1.6\%} \\
+BC-MFA ($4, 4$) & 3 & $1.75 \pm 1.49$ & 1.0 / 1 & 56.6\% \\
+BC-MFA ($4, 4$) & 4 & $1.15 \pm 0.38$ & 1.0 / 1 & 86.2\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:mc_results} exposes a decisive operational threshold. In the naive baseline, a single capture compromises the secret deterministically ($100\%$). In the intermediate $(2, 2)$ regime, two sessions yield $66.6\%$ exact recovery. In BC-MFA $(4, 4)$, finite-grid quadrant balance sustains higher ambiguity than the i.i.d. approximation ($576$ median and $288$ $\text{P}_5$ at $k = 1$; $6.0$ median and $2$ $\text{P}_5$ at $k = 2$, with only $1.6\%$ exact recovery), but session $k = 3$ causes recovery to jump sharply to $56.6\%$. Therefore, the IdP enforces a strict policy ceiling of $k_{\max} = 2$ untrusted step-up logins (or $k_{\max} = 1$ with $0.0\%$ recovery for maximum-assurance profiles), requiring a trusted-device secret re-enrollment before permitting further untrusted sessions—avoiding fragile mental offset shifts over untrusted channels.
+
+\subsection{Mitigation and Boundaries Against AitM Reverse Proxies}
+We analyze three distinct AitM reverse-proxy scenarios (e.g., Evilginx~\cite{kondracki2021catching, lim2025phishers}):
+\begin{enumerate}
+    \item \textit{Automated Relay or Remote Solver Farm:} Intercepting $M_t$ and forwarding it to an automated optical bot or remote human solver induces sharp timing and kinematic anomalies—either near-zero hesitation ($\tau_{cog} \approx 0$) with uniform synthetic cadence or network-plus-comprehension latency exceeding the 15-second TTL—triggering rejection ($\text{Score}(\mathcal{B}) < \theta_{bio}$)~\cite{khan2024mouse}.
+    \item \textit{Active Proxy on a Previously Enrolled Browser:} When the browser already holds a non-exportable WebCrypto DPoP keypair (\texttt{extractable: false}) stored in \texttt{IndexedDB} under the legitimate IdP origin, Same-Origin Policy prevents a spoofed domain (\texttt{login.evil-proxy.example}) from accessing the pinned key, causing the IdP to reject the mismatched \texttt{dpop\_jkt} and \texttt{htu} (HTTP URI) signature~\cite{rfc9449dpop}.
+    \item \textit{Active Proxy on a First-Contact Public Kiosk (Explicit Boundary):} When a user visits a spoofed phishing domain from an unpinned kiosk with no prior DPoP key, an active reverse proxy capable of rewriting client-side JavaScript in transit can generate its own server-side DPoP keypair toward the IdP, terminating sender constraint on the proxy. We state this limitation candidly: deterministic first-contact phishing resistance without prior origin pinning requires browser-enforced, hardware-backed origin binding (WebAuthn). Even on unpinned kiosks, however, once the user connects to the authentic IdP origin, RFC 9449 DPoP binding and RFC 7636 PKCE block passive infostealers from replaying exfiltrated authorization codes or access tokens from external attacker hosts~\cite{rfc7636pkce, rfc9449dpop, rfc9700bcp}.
+\end{enumerate}

@@ -1,0 +1,213 @@
+\section{System Architecture and Authentication Flow}
+\label{sec:architecture}
+
+\subsection{Architectural Components and Trust Boundaries}
+The Blind Cognitive Multi-Factor Authentication (BC-MFA) architecture defines four communicating entities operating across distinct trust boundaries. The Identity Provider (IdP) functions as the authoritative verification server: it generates uniform random cognitive secrets ($S_u$) during enrollment, stores them under Hardware Security Module (HSM) envelope encryption (because $S_u$ must be evaluated server-side rather than hashed irreversibly), synthesizes ephemeral challenge matrices ($M_t$), evaluates behavioral anomaly telemetry, and mints signed OpenID Connect assertions and DPoP-bound access tokens.
+
+The Untrusted Client Endpoint represents a public workstation, unmanaged BYOD browser, or mobile application operating as an OAuth 2.0 public client (SPA/native app) under RFC 9700~\cite{rfc9700bcp}. We define this endpoint as exposed to commodity, unprivileged user-space infostealers performing asynchronous disk/cookie harvesting, periodic screen scraping, and user-space keystroke logging. We explicitly exclude kernel-level (ring 0) rootkits and active same-privilege browser-debugging injection capable of using live WebCrypto handles as signing oracles.
+
+The Human User acts as an autonomous cognitive processing unit who memorizes the private secret $S_u$ and computes responses mentally without external cryptographic hardware. Finally, the Relying Party (RP) / Resource Server hosts the protected web or mobile API, validating RFC 8176 \texttt{amr} claims and RFC 9449 DPoP-bound access tokens~\cite{rfc8176amr, rfc9449dpop}. To prevent static password capture on hostile hosts, the IdP evaluates endpoint posture during session initiation and suppresses static password prompts on untrusted terminals, executing a passwordless step-up ceremony where only the public account identifier (\texttt{username}), RFC 7636 PKCE challenge~\cite{rfc7636pkce}, and ephemeral DPoP public key thumbprint (\texttt{dpop\_jkt}) precede the visual challenge. Figure~\ref{fig:bcmfa_flow} illustrates the standards-compliant public-client exchange.
+
+\begin{figure*}[!t]
+\centering
+\resizebox{0.92\textwidth}{!}{%
+\begin{tikzpicture}[
+    font=\sffamily\scriptsize,
+    lifeline/.style={thick, dashed, draw=gray!45},
+    actor/.style={rectangle, draw=blue!85!black, fill=blue!10, thick, minimum width=3.1cm, minimum height=0.75cm, align=center, rounded corners=3pt},
+    untrusted/.style={rectangle, draw=red!85!black, fill=red!10, thick, minimum width=3.3cm, minimum height=0.75cm, align=center, rounded corners=3pt},
+    phasebox/.style={rectangle, rounded corners=4pt, draw=gray!35, line width=0.8pt},
+    lbl/.style={fill=white, fill opacity=0.95, text opacity=1, inner sep=1.2pt, font=\sffamily\scriptsize},
+    msg/.style={-{Latex[length=2.2mm,width=1.4mm]}, thick, draw=blue!75!black},
+    cogmsg/.style={-{Latex[length=2.2mm,width=1.4mm]}, thick, draw=purple!85!black},
+    secmsg/.style={-{Latex[length=2.2mm,width=1.4mm]}, thick, draw=teal!85!black},
+    retmsg/.style={-{Latex[length=2.2mm,width=1.4mm]}, thick, draw=green!60!black},
+    cogbox/.style={rectangle, draw=purple!80!black, fill=purple!8, thick, font=\scriptsize, align=center, rounded corners=3pt, inner sep=3.5pt},
+    idpbox/.style={rectangle, draw=teal!80!black, fill=teal!8, thick, font=\scriptsize, align=center, rounded corners=3pt, inner sep=3.5pt}
+]
+    % Phase background boxes with generous top header strips and left/right margins
+    \draw[phasebox, fill=blue!3] (-2.7, -0.58) rectangle (16.4, -3.72);
+    \node[anchor=north west, font=\sffamily\bfseries\tiny, color=blue!75!black] at (-2.55, -0.64) {\textsc{Phase 1: OIDC Public-Client Initiation, PKCE (RFC 7636) \& Risk-Adaptive Step-Up}};
+
+    \draw[phasebox, fill=purple!3] (-2.7, -3.92) rectangle (16.4, -7.88);
+    \node[anchor=north west, font=\sffamily\bfseries\tiny, color=purple!80!black] at (-2.55, -3.98) {\textsc{Phase 2: Quadrant-Balanced Toroidal Matrix Challenge \& Mental Execution}};
+
+    \draw[phasebox, fill=teal!3] (-2.7, -8.08) rectangle (16.4, -11.58);
+    \node[anchor=north west, font=\sffamily\bfseries\tiny, color=teal!75!black] at (-2.55, -8.14) {\textsc{Phase 3: Anomaly Verification, Client Token Exchange \& DPoP-Bound Resource Access (RFC 9449)}};
+
+    % Lifeline headers
+    \node[actor] (user) at (0, 0) {\textbf{Human User}\\\tiny(Cognitive Engine)};
+    \node[untrusted] (client) at (4.9, 0) {\textbf{Untrusted Endpoint}\\\tiny(SPA / Mobile Public Client)};
+    \node[actor] (idp) at (9.9, 0) {\textbf{Identity Provider (IdP)}\\\tiny(Auth Server / Verifier)};
+    \node[actor] (rp) at (14.7, 0) {\textbf{Relying Party / API}\\\tiny(Resource Server)};
+
+    % Lifeline paths
+    \draw[lifeline] (user.south) -- ++(0, -11.30);
+    \draw[lifeline] (client.south) -- ++(0, -11.30);
+    \draw[lifeline] (idp.south) -- ++(0, -11.30);
+    \draw[lifeline] (rp.south) -- ++(0, -11.30);
+
+    % Phase 1: Steps 1 to 5
+    \draw[msg] (4.9, -1.25) -- (14.7, -1.25) node[lbl, midway, above=1pt] {1. Initiate Protected Access (\texttt{GET /app})};
+    \draw[msg] (14.7, -1.80) -- (4.9, -1.80) node[lbl, midway, above=1pt] {2. OIDC Redirect (\texttt{/authorize?scope=openid\&acr\_values=untrusted-high})};
+    \draw[msg] (4.9, -2.35) -- (9.9, -2.35) node[lbl, midway, above=1pt] {3. GET \texttt{/authorize} (PKCE \texttt{code\_challenge}, WebCrypto \texttt{dpop\_jkt})};
+    \draw[secmsg] (9.9, -2.90) -- (4.9, -2.90) node[lbl, midway, above=1pt] {4. Untrusted Posture $\rightarrow$ Suppress Static Password; Issue \texttt{cid}};
+    \draw[msg] (4.9, -3.45) -- (9.9, -3.45) node[lbl, midway, above=1pt] {5. POST \texttt{username} + DPoP Proof JWS};
+
+    % Phase 2: Steps 6 to 9
+    \draw[secmsg] (9.9, -4.85) -- (4.9, -4.85) node[lbl, midway, above=1pt] {6. Quadrant-Balanced Matrix $M_t \in \Sigma_{sub}^{4\times 4}$, Anchor $N_{ch}$, \texttt{cid} (TTL = 15 s)};
+    \draw[cogmsg] (4.9, -5.42) -- (0, -5.42) node[lbl, midway, above=1pt] {7. Display Matrix $M_t$ on Screen (Zero secret exposed)};
+    \node[cogbox, text width=4.6cm] at (0, -6.14) {\textbf{Mental Calculation:}\\$R_t = f_{cog}(S_u, M_t, N_{ch})$ over $\mathbb{Z}_4 \times \mathbb{Z}_4 \setminus \{(0,0)\}$};
+    \draw[cogmsg] (0, -7.12) -- (4.9, -7.12) node[lbl, midway, above=1pt] {8. Enter One-Time Response $R_t$ + Kinetic Interaction};
+    \draw[secmsg] (4.9, -7.62) -- (9.9, -7.62) node[lbl, midway, above=1pt] {9. POST $R_t$ + DPoP-Signed Telemetry $\mathcal{E}_{K_{IdP}}(\mathcal{B} \parallel \texttt{cid})$};
+
+    % Phase 3: Steps 10 to 13
+    \node[idpbox] at (9.9, -8.82) {\textbf{Server Verification: } $R_t \stackrel{?}{=} f_{cog}(S_u, M_t, N_{ch}) \;\land\; \text{Fresh}(\texttt{cid}) \;\land\; \text{Score}(\mathcal{B}) \ge \theta_{bio}$};
+    \draw[retmsg] (9.9, -9.62) -- (4.9, -9.62) node[lbl, midway, above=1pt] {10. 302 Redirect with PKCE- \& DPoP-Bound Auth Code};
+    \draw[msg] (4.9, -10.17) -- (9.9, -10.17) node[lbl, midway, above=1pt] {11. POST \texttt{/token} (Auth Code + PKCE \texttt{code\_verifier} + DPoP Proof)};
+    \draw[retmsg] (9.9, -10.72) -- (4.9, -10.72) node[lbl, midway, above=1pt] {12. Return ID Token (\texttt{amr}) + DPoP-Bound Access Token (\texttt{cnf.jkt})};
+    \draw[msg] (4.9, -11.27) -- (14.7, -11.27) node[lbl, midway, above=1pt] {13. Protected API Call: \texttt{Authorization: DPoP <AT>} + Fresh DPoP Proof};
+\end{tikzpicture}%
+}
+\caption{Standards-compliant OIDC Core 1.0, RFC 7636 PKCE, and RFC 9449 DPoP protocol exchange for BC-MFA public clients.}
+\label{fig:bcmfa_flow}
+\end{figure*}
+
+\subsection{Cognitive Challenge and Toroidal Transformation Mechanics}
+The core visual defense of BC-MFA relies on quadrant-balanced permutation matrices with controlled symbol multiplicity, ensuring that display scrapers extract minimal usable intelligence regarding the user's secret $S_u$. Upon step-up initiation, the IdP synthesizes an ephemeral challenge matrix $M_t$ of dimensions $4 \times 4$ ($N = 16$ cells) from an alphanumeric alphabet $\Sigma$ ($|\Sigma| = 36$), partitioned into $L = 4$ disjoint $2 \times 2$ quadrants ($Q_1$--$Q_4$). To balance instantaneous display entropy against multi-session intersection ambiguity, the server samples an active symbol subset $\Sigma_{sub} \subset \Sigma$ of cardinality $|\Sigma_{sub}| = N / d$ and assigns each symbol exact multiplicity $d = L = 4$ under \textit{quadrant-balanced placement}: every symbol in $\Sigma_{sub}$ appears exactly once inside each of the $L$ quadrants. The exact Shannon entropy of a balanced $L$-block challenge matrix $M_t$ (with $d = L$) is:
+\begin{equation}
+H_{\text{bal}}(M_t) = \log_2 \binom{|\Sigma|}{N/d} + d \cdot \log_2 \!\left( \left(\frac{N}{d}\right)! \right)
+\label{eq:entropy}
+\end{equation}
+In the BC-MFA quadrant-balanced regime ($|\Sigma| = 36, N = 16, d = L = 4$), Eq.~(\ref{eq:entropy}) yields $H_{\text{bal}}(M_t) = \log_2 \binom{36}{4} + 4 \cdot \log_2(4!) \approx 15.85 + 18.34 = 34.19\text{ bits}$ of per-session challenge entropy (compared to $55.45\text{ bits}$ for half-balanced $d = L = 2$, $41.76\text{ bits}$ for unconstrained multiset placement $\log_2\binom{36}{4} + \log_2(16!/(4!)^4)$ with $d = 4$, and $82.72\text{ bits}$ for unconstrained full-alphabet i.i.d. placement $16 \log_2 36$). The server pairs $M_t$ with a public anchor character $N_{ch} \in \Sigma_{sub}$, a unique challenge identifier \texttt{cid}, and a strict expiration window ($\text{TTL} = 15\text{ s}$).
+
+During trusted-device enrollment, the server assists the user in sampling a uniform random secret $S_u = \big(q_u, \langle (\Delta r_1, \Delta c_1), \dots, (\Delta r_{|R|}, \Delta c_{|R|}) \rangle\big)$ to eliminate human spatial selection bias. Secret $S_u$ comprises a private anchor quadrant $q_u \in \{Q_1, Q_2, Q_3, Q_4\}$ and an ordered sequence of $|R| = 4$ distinct \emph{non-zero} toroidal offset vectors in $\mathbb{Z}_4 \times \mathbb{Z}_4 \setminus \{(0,0)\}$. Explicitly excluding the identity offset $(0,0)$ is cryptographically necessary: otherwise $M_t[r_0, c_0] = N_{ch}$ would deterministically echo the public anchor character in every session, leaking that offset index immediately. Because $N_{ch}$ appears once in every quadrant, the user locates $N_{ch}$ within private quadrant $q_u$ to establish the session origin $(r_0, c_0) \in \mathbb{Z}_4 \times \mathbb{Z}_4$ without touching or hovering over it, then derives response $R_t = (s_1, \dots, s_{|R|})$:
+\begin{equation}
+s_i = M_t\big[(r_0 + \Delta r_i) \bmod 4,\; (c_0 + \Delta c_i) \bmod 4\big]
+\label{eq:toroidal}
+\end{equation}
+for $i \in \{1, \dots, |R|\}$. Because modular addition in $\mathbb{Z}_4 \times \mathbb{Z}_4$ forms a bijection, distinct non-zero offsets map deterministically to distinct grid cells without boundary overflow. Figure~\ref{fig:worked_example} illustrates a complete step-by-step evaluation.
+
+\begin{figure}[!t]
+\centering
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[
+    font=\sffamily\scriptsize,
+    cell/.style={rectangle, draw=gray!60, minimum size=0.82cm, align=center, font=\ttfamily\bfseries\normalsize},
+    qfill/.style={fill=purple!10},
+    anc/.style={fill=blue!18, draw=blue!80!black, very thick},
+    hit/.style={fill=teal!15, draw=teal!75!black, thick},
+    badge/.style={circle, fill=teal!80!black, text=white, font=\sffamily\bfseries\tiny, inner sep=1pt}
+]
+    % Column indices
+    \foreach \c in {0,1,2,3} {
+        \node[font=\ttfamily\scriptsize, color=gray!80!black] at (\c*0.82 + 0.41, 0.25) {c=\c};
+    }
+    % Row indices
+    \foreach \r in {0,1,2,3} {
+        \node[font=\ttfamily\scriptsize, color=gray!80!black] at (-0.32, -\r*0.82 - 0.41) {r=\r};
+    }
+
+    % Grid cells: M = [['M','7','3','K'], ['K','3','7','M'], ['7','K','M','3'], ['3','M','K','7']]
+    % Row 0
+    \node[cell, hit] (c00) at (0*0.82+0.41, -0*0.82-0.41) {M};
+    \node[cell]      (c01) at (1*0.82+0.41, -0*0.82-0.41) {7};
+    \node[cell, qfill] (c02) at (2*0.82+0.41, -0*0.82-0.41) {3};
+    \node[cell, anc]   (c03) at (3*0.82+0.41, -0*0.82-0.41) {K};
+    % Row 1
+    \node[cell]      (c10) at (0*0.82+0.41, -1*0.82-0.41) {K};
+    \node[cell, hit] (c11) at (1*0.82+0.41, -1*0.82-0.41) {3};
+    \node[cell, qfill] (c12) at (2*0.82+0.41, -1*0.82-0.41) {7};
+    \node[cell, qfill] (c13) at (3*0.82+0.41, -1*0.82-0.41) {M};
+    % Row 2
+    \node[cell, hit] (c20) at (0*0.82+0.41, -2*0.82-0.41) {7};
+    \node[cell]      (c21) at (1*0.82+0.41, -2*0.82-0.41) {K};
+    \node[cell]      (c22) at (2*0.82+0.41, -2*0.82-0.41) {M};
+    \node[cell]      (c23) at (3*0.82+0.41, -2*0.82-0.41) {3};
+    % Row 3
+    \node[cell]      (c30) at (0*0.82+0.41, -3*0.82-0.41) {3};
+    \node[cell]      (c31) at (1*0.82+0.41, -3*0.82-0.41) {M};
+    \node[cell, hit] (c32) at (2*0.82+0.41, -3*0.82-0.41) {K};
+    \node[cell]      (c33) at (3*0.82+0.41, -3*0.82-0.41) {7};
+
+    % Bold quadrant dividers
+    \draw[very thick, black] (0, 0) rectangle (3.28, -3.28);
+    \draw[very thick, black] (1.64, 0) -- (1.64, -3.28);
+    \draw[very thick, black] (0, -1.64) -- (3.28, -1.64);
+
+    % Quadrant labels
+    \node[font=\sffamily\tiny\bfseries, color=gray!70!black] at (0.18, -0.14) {$Q_1$};
+    \node[font=\sffamily\tiny\bfseries, color=purple!80!black] at (1.82, -0.14) {$Q_2$};
+    \node[font=\sffamily\tiny\bfseries, color=gray!70!black] at (0.18, -1.78) {$Q_3$};
+    \node[font=\sffamily\tiny\bfseries, color=gray!70!black] at (1.82, -1.78) {$Q_4$};
+
+    % Step badges
+    \node[badge] at ($(c00.south east)+(-0.12,0.12)$) {1};
+    \node[badge] at ($(c11.south east)+(-0.12,0.12)$) {2};
+    \node[badge] at ($(c20.south east)+(-0.12,0.12)$) {3};
+    \node[badge] at ($(c32.south east)+(-0.12,0.12)$) {4};
+    \node[circle, fill=blue!80!black, text=white, font=\sffamily\bfseries\tiny, inner sep=0.8pt] at ($(c03.south east)+(-0.12,0.12)$) {0};
+
+    % Right-hand explanation box
+    \node[rectangle, draw=black!65, fill=gray!4, rounded corners=3pt, align=left, font=\sffamily\scriptsize\raggedright, anchor=north west, inner sep=4pt, text width=4.45cm] at (3.52, 0.05) {
+        \textbf{Public Challenge:} $\Sigma_{sub}=\{\texttt{K,7,M,3}\}$, $N_{ch}=\texttt{K}$\\
+        \textbf{Private Secret $S_u$:} $q_u = Q_2$ (shaded),\\
+        offsets $\langle (0,1),(1,2),(2,1),(3,3)\rangle$\\[3pt]
+        \textbf{Origin:} \texttt{K} in $Q_2 \Rightarrow (r_0,c_0)=(0,3)$~\textsf{[0]}\\[2pt]
+        \textbf{1.} $(0{+}0,3{+}1)\bmod 4=(0,0)\rightarrow \texttt{M}$\\
+        \textbf{2.} $(0{+}1,3{+}2)\bmod 4=(1,1)\rightarrow \texttt{3}$\\
+        \textbf{3.} $(0{+}2,3{+}1)\bmod 4=(2,0)\rightarrow \texttt{7}$\\
+        \textbf{4.} $(0{+}3,3{+}3)\bmod 4=(3,2)\rightarrow \texttt{K}$\\[3pt]
+        \textbf{One-Time Response:} $R_t = \texttt{"M37K"}$
+    };
+\end{tikzpicture}%
+}
+\caption{Worked example of a $4 \times 4$ quadrant-balanced toroidal challenge ($d=L=4$) illustrating private origin anchoring and modular wrap-around.}
+\label{fig:worked_example}
+\end{figure}
+
+Because $M_t$ refreshes independently on every attempt with a newly sampled subset $\Sigma_{sub} \subset \Sigma$, consecutive responses for a fixed secret $S_u$ almost never repeat. Even under a worst-case analytical lower bound where $\Sigma_{sub}$ were held fixed across sessions (i.i.d. symbol approximation), divergence satisfies:
+\begin{equation}
+\Pr\big(R_{t_1} \ne R_{t_2} \;\big|\; S_u, \Sigma_{sub}\text{ fixed}\big) \approx 1 - \left(\frac{d}{N}\right)^{|R|} = \frac{255}{256}
+\label{eq:divergence}
+\end{equation}
+($99.61\%$ analytical; $99.46\%$ empirically under exact finite-grid quadrant-balanced sampling without replacement). When $\Sigma_{sub}$ is resampled uniformly from $|\Sigma|=36$ each session, consecutive responses diverge with empirical probability $99.999\%$ (measured across $2 \times 10^5$ independent pairs), since matching requires the new 4-symbol subset to contain every distinct character in $R_{t_1}$.
+
+\subsection{Passive Behavioral Anomaly Telemetry}
+To deter automated replay bots and off-device human solver relays, the client runs a passive event observer during the challenge ceremony. On desktop browsers, the observer samples pre-entry cognitive hesitation latency ($\tau_{cog}$), pointer trajectory curvature ($\kappa_{path}$), velocity inflections ($\vec{v}_p$), keystroke hold times ($HT_i = t_{up,i} - t_{down,i}$), and inter-key flight times ($FT_i = t_{down,i+1} - t_{up,i}$), yielding $\mathcal{B}_{desktop} = \{\tau_{cog}, \vec{v}_p, \kappa_{path}, HT, FT\}$~\cite{khan2024mouse}. On mobile touchscreens where continuous cursor paths are absent, it records $\mathcal{B}_{mobile} = \{\tau_{cog}, A_{touch}, P_{touch}, HT, FT\}$ capturing contact area and normalized capacitive pressure~\cite{incel2021dakota}.
+
+Crucially, we recognize a fundamental statistical boundary: a 4-character response yields only 4 hold times and 3 flight times, and untrusted kiosks exhibit heterogeneous keyboards, pointer DPIs, and browser event throttling. Consequently, BC-MFA does \emph{not} rely on 4-keystroke cadence for standalone cross-device biometric user identification. Instead, $\text{Score}(\mathcal{B})$ operates primarily as a \emph{human-vs-automation and relay anomaly detector} (flagging zero-hesitation scripted injections, uniform synthetic timing, or out-of-band relay delays), applying user-specific baseline scoring strictly as a secondary risk signal on previously enrolled devices.
+
+To prevent cross-session telemetry replay and passive network inspection, the client binds the active challenge identifier \texttt{cid} inside the payload, signs the hash with its ephemeral WebCrypto DPoP private key, and encrypts $\mathcal{E}_{K_{IdP}}(\mathcal{B} \parallel \texttt{cid})$ under the IdP's public key. Note that payload encryption protects confidentiality on the wire rather than against local client tampering; integrity against scripted spoofing rests on server-side challenge timing bounds and Isolation Forest / Random Forest anomaly scoring ($\text{Score}(\mathcal{B}) \ge \theta_{bio}$).
+
+\subsection{OpenID Connect Profile, RFC 8176 Claims, and RFC 9449 DPoP}
+When both $R_t$ and $\text{Score}(\mathcal{B})$ pass verification within the 15-second TTL, the IdP issues a PKCE- and DPoP-bound authorization code. Following RFC 9700 for public SPA/mobile clients~\cite{rfc9700bcp}, the \emph{client} exchanges the authorization code directly at the IdP \texttt{/token} endpoint presenting both PKCE \texttt{code\_verifier} and a fresh DPoP Proof JWS signed by its non-exportable WebCrypto private key (\texttt{extractable: false}, stored in \texttt{IndexedDB}). The IdP returns: (1) an OpenID Connect Core 1.0 ID Token~\cite{oidc_core1} populated with \emph{standard registered} RFC 8176 \texttt{amr} values~\cite{rfc8176amr}—\texttt{"mfa"} (multi-factor), \texttt{"kba"} (cognitive knowledge-based challenge), \texttt{"rba"} (risk-based behavioral anomaly verification), and \texttt{"swk"} (software-secured proof-of-possession key)—ensuring zero mandatory code changes for standard Relying Parties, plus an optional namespaced extension claim for BC-MFA-aware RPs; and (2) an RFC 9449 DPoP-bound Access Token carrying the \texttt{cnf.jkt} JWK SHA-256 thumbprint~\cite{rfc9449dpop} validated by the Resource Server on every API request. Listing~\ref{lst:oidc_token} presents both decoded synthetic JWT payloads.
+
+\noindent\begin{minipage}{\columnwidth}
+\begin{lstlisting}[caption={Decoded OIDC ID Token (Registered RFC 8176 AMR) and RFC 9449 DPoP-Bound Access Token Confirmation Claims}, label={lst:oidc_token}, basicstyle=\ttfamily\scriptsize, numbers=none]
+// 1. OIDC ID Token Payload (RFC 8176 Standard AMR)
+{
+  "iss": "https://identity.ispgaya.pt/auth",
+  "sub": "usr-2022105675-casousa",
+  "aud": "sistemas-web-mobile-app",
+  "exp": 1794502800, "iat": 1794499200,
+  "auth_time": 1794499195,
+  "nonce": "n-0S6_WzA2MjY",
+  "acr": "urn:ispgaya:oidc:acr:untrusted-high",
+  "amr": ["mfa", "kba", "rba", "swk"],
+  "https://identity.ispgaya.pt/bc_mfa": {
+    "posture": "untrusted", "cognitive_ms": 3820,
+    "anomaly_score": 0.94
+  }
+}
+// 2. DPoP-Bound Access Token Claims (RFC 9449)
+{
+  "iss": "https://identity.ispgaya.pt/auth",
+  "sub": "usr-2022105675-casousa",
+  "scope": "openid api.read",
+  "cnf": {
+    "jkt": "0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I"
+  }
+}
+\end{lstlisting}
+\end{minipage}

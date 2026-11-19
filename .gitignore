@@ -1,0 +1,20 @@
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+
+# macOS & local workspace helpers
+.DS_Store
+GEMINI.command
+__pycache__/
+*.pyc
+
+# Local working review drafts (excluded from public artifact repo)
+PLANO_CORRECAO_REVISAO_TP2.md
+REVISAO_TECNOLOGICA_METRICAS_TP2.md

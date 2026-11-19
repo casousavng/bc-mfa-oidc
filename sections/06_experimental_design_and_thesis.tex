@@ -1,0 +1,22 @@
+\section{Experimental Design and Empirical Evaluation Plan}
+\label{sec:experimental_design_and_thesis}
+
+\subsection{Formal Research Hypotheses}
+To validate the operational viability of BC-MFA within the author's Master's dissertation at ISPGAYA, we formulate three falsifiable hypotheses:
+\begin{align}
+H_1: &\quad \mu_{T_{total}} \le 5.0\text{ s},\;\; \sigma_{T} \le 1.25\text{ s} \label{eq:h1}\\
+H_2: &\quad \text{SUS} \ge 75.0,\;\; \text{NASA-TLX}_{mental} \le 40.0 \label{eq:h2}\\
+H_3: &\quad \text{FAR}_{bot/relay} \le 1.5\%,\;\; \text{FRR}_{human} \le 4.0\% \label{eq:h3}
+\end{align}
+Hypothesis $H_1$ posits that trained participants complete perceptual search, toroidal traversal, and 4-character input within five seconds on average. Hypothesis $H_2$ tests whether the ceremony achieves acceptable enterprise usability (SUS $\ge 75$) without excessive mental workload (NASA-TLX mental demand $\le 40$). Hypothesis $H_3$ evaluates whether the passive behavioral anomaly classifier separates legitimate human cognitive ceremonies from automated replay bots and off-device relay solvers across heterogeneous desktop and mobile endpoints within strict error tolerances.
+
+\subsection{Testbed Implementation Architecture}
+The experimental prototype comprises three modular tiers. The server tier implements a custom Authenticator SPI for Keycloak 24 handling HSM-backed secret storage, quadrant-balanced matrix synthesis, RFC 7636 PKCE validation, RFC 9449 DPoP verification, and OIDC token issuance with registered RFC 8176 \texttt{amr} claims. The client tier consists of a TypeScript SPA web agent and a React Native mobile application with non-blocking WebCrypto DPoP key management and passive interaction observers. The analytics tier runs a Scikit-Learn service executing Isolation Forest and Random Forest anomaly scoring over $\mathcal{B}$.
+
+\subsection{Longitudinal Human Study, Ethics, and Statistical Design}
+The empirical study will recruit $N = 64$ participants stratified equally across technical and non-technical backgrounds. An a priori statistical power analysis for repeated-measures ANOVA across four longitudinal timepoints (medium effect size $f = 0.25$, $\alpha = 0.05$, sphericity correction $\epsilon = 0.75$) confirms that $N = 64$ provides statistical power $1 - \beta > 0.90$ even after $15\%$ attrition. All procedures will obtain Institutional Ethics Board (IRB) approval prior to recruitment, enforcing informed consent and strict GDPR Art.~9 compliance (pseudonymized participant IDs, ephemeral kinetic feature retention, and explicit opt-out rights).
+
+The protocol spans four milestones: trusted-device onboarding with interactive tutorial, immediate post-training verification, 7-day recall, and 30-day retention, employing a counterbalanced within-subjects baseline against TOTP (RFC 6238) and WebAuthn passkeys. Repeated-measures ANOVA with Greenhouse-Geisser sphericity corrections will quantify completion latency, cognitive error decay, and False Reject Rates across sessions.
+
+\subsection{Adversarial Red-Team Emulation and Ablation}
+Host-compromise survivability will be tested empirically against two controlled red-team harnesses. First, an Evilginx 3.x reverse proxy will execute automated relay, remote solver-farm, enrolled-browser pinning, and first-contact phishing scenarios to validate both timing/pinning mitigations and the documented first-contact boundary. Second, user-space infostealer harnesses modeling RedLine and Lumma will capture input and display buffers under two modes: (a) an \emph{ablation mode} with the $k_{\max} = 2$ policy ceiling intentionally disabled across 100 consecutive sessions to measure empirical rule-set shrinkage $|\mathcal{C}_k|$ against Table~\ref{tab:mc_results}, and (b) \emph{production enforcement mode} verifying deterministic blocking once $k_{\max}$ is reached.

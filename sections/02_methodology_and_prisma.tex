@@ -1,0 +1,88 @@
+\section{Systematic Literature Review Methodology (PRISMA 2020)}
+\label{sec:methodology_and_prisma}
+
+\subsection{Review Protocol and Scoped Retrieval Strategy}
+To establish an evidence-grounded baseline for cognitive authentication on untrusted web and mobile endpoints, this study executes a systematic literature review following the PRISMA 2020 reporting guideline~\cite{page2021prisma} and domain-specific phishing review protocols~\cite{naqvi2023mitigation}. We queried four primary scientific databases: the ACM Digital Library, IEEE Xplore, ScienceDirect (Elsevier), and SpringerLink. To maintain tractability and avoid broad single-facet noise, retrieval enforced a three-way conjunction across title and author-keyword metadata, restricting results to peer-reviewed security and human-computer interaction venues published between January 2021 and October 2026:
+
+\begin{quote}\raggedright\footnotesize\ttfamily
+("authentication" OR "multi-factor" OR "FIDO2" OR "OpenID Connect" OR "OAuth 2.0") AND ("untrusted" OR "phishing" OR "adversary-in-the-middle" OR "infostealer" OR "shoulder surfing") AND ("cognitive" OR "challenge-response" OR "behavioral biometrics" OR "keystroke dynamics" OR "mouse dynamics" OR "token binding" OR "session hijacking")
+\end{quote}
+
+In accordance with PRISMA 2020 dual-channel identification, foundational protocol standards were identified separately via normative standards bodies (IETF, OpenID Foundation, NIST, and W3C)~\cite{oidc_core1, nist80063b4, rfc6238totp, rfc6749oauth, rfc7636pkce, rfc8176amr, rfc9449dpop, rfc9700bcp, w3cwebauthn3}, including pre-2021 RFCs retained as active normative baselines.
+
+\subsection{Eligibility Criteria and PRISMA Selection Workflow}
+Database records underwent formal evaluation against predefined eligibility criteria. Inclusion required: (1) archival publication in peer-reviewed journals or conference proceedings with verifiable Digital Object Identifiers (DOIs), (2) reproducible formal security proofs, protocol measurements, or empirical human usability data, and (3) direct applicability to web or mobile authentication environments. Exclusion removed duplicates, off-topic titles/abstracts, non-archival short posters or editorial summaries, legacy desktop-only smartcard architectures, and papers lacking quantitative security or usability evaluation. Figure~\ref{fig:prisma_tp2} presents the dual-channel PRISMA 2020 selection workflow.
+
+\begin{figure}[!t]
+\centering
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[
+    font=\sffamily\scriptsize,
+    hdr/.style={rectangle, draw=blue!85!black, fill=blue!12, thick, rounded corners=2pt, align=center, font=\sffamily\bfseries\scriptsize, minimum height=0.6cm},
+    box/.style={rectangle, draw=black!75, fill=gray!4, thick, rounded corners=2pt, align=left, font=\sffamily\scriptsize\raggedright, inner sep=3.5pt},
+    exclbox/.style={rectangle, draw=red!80!black, fill=red!5, thick, rounded corners=2pt, align=left, font=\sffamily\scriptsize\raggedright, inner sep=3.5pt},
+    normbox/.style={rectangle, draw=teal!80!black, fill=teal!6, thick, rounded corners=2pt, align=left, font=\sffamily\scriptsize\raggedright, inner sep=3.5pt},
+    arrow/.style={-Latex, thick, draw=blue!85!black},
+    sidearrow/.style={-Latex, thick, draw=red!80!black},
+    normarrow/.style={-Latex, thick, draw=teal!80!black}
+]
+    % Column Headers
+    \node[hdr, text width=4.1cm] (h_db) {Identification via Databases};
+    \node[hdr, draw=teal!80!black, fill=teal!12, text width=3.5cm, right=0.55cm of h_db] (h_oth) {Identification via Other Methods};
+
+    % Left Branch: Databases
+    \node[box, text width=4.1cm, below=0.25cm of h_db] (db_ident) {
+        \textbf{Records identified} ($n = 112$):\\
+        $\bullet$ ACM DL ($n = 42$)\\
+        $\bullet$ IEEE Xplore ($n = 38$)\\
+        $\bullet$ ScienceDirect ($n = 18$)\\
+        $\bullet$ SpringerLink ($n = 14$)
+    };
+
+    \node[box, text width=4.1cm, below=0.32cm of db_ident] (db_screen) {
+        \textbf{Full-text assessed} ($n = 76$)\\
+        Duplicates \& off-topic titles removed ($n = 36$)
+    };
+
+    \node[box, text width=4.1cm, below=0.32cm of db_screen] (db_incl) {
+        \textbf{Domain studies included} ($n = 30$):\\
+        Peer-reviewed web/mobile auth papers (2021--2026)
+    };
+
+    % Right Branch: Exclusions + Normative Standards
+    \node[normbox, text width=3.75cm, below=0.25cm of h_oth] (oth_norm) {
+        \textbf{Normative/Method.} ($n{=}10$):\\
+        $\bullet$ IETF RFCs ($n = 6$)\\
+        $\bullet$ OIDC Core 1.0 ($n = 1$)\\
+        $\bullet$ NIST SP / W3C Rec ($n = 2$)\\
+        $\bullet$ PRISMA 2020 ($n = 1$)
+    };
+
+    \node[exclbox, text width=3.75cm, below=0.26cm of oth_norm] (db_excl) {
+        \textbf{Excluded full text} ($n = 46$):\\
+        $\bullet$ No quant. eval ($n = 20$)\\
+        $\bullet$ Legacy desktop ($n = 14$)\\
+        $\bullet$ Non-archival ($n = 12$)
+    };
+
+    \node[normbox, draw=blue!85!black, fill=blue!6, text width=3.75cm, below=0.26cm of db_excl] (tot_incl) {
+        \textbf{Total corpus} ($N = 40$):\\
+        30 domain papers + 9 standards + 1 PRISMA guideline
+    };
+
+    % Connectors
+    \draw[arrow] (db_ident.south) -- (db_screen.north);
+    \draw[arrow] (db_screen.south) -- (db_incl.north);
+    \draw[sidearrow] (db_screen.east) -- (db_excl.west);
+    \draw[arrow] (db_incl.east) -- (tot_incl.west);
+    \draw[normarrow] (oth_norm.east) -- ++(0.22,0) |- (tot_incl.east);
+\end{tikzpicture}%
+}
+\caption{Dual-channel systematic literature and normative selection workflow adapted from PRISMA 2020.}
+\label{fig:prisma_tp2}
+\end{figure}
+
+Scoped title-and-keyword querying retrieved $n = 112$ initial database records. Removing duplicates and off-topic titles excluded $n = 36$ entries, leaving $n = 76$ full-text candidates. Full-text eligibility screening excluded $n = 46$ records: 20 lacked quantitative usability or security evaluation, 14 relied on legacy desktop-only smartcard dependencies, and 12 were non-archival posters or out-of-scope summaries, yielding exactly $n = 30$ peer-reviewed domain studies ($76 - 46 = 30$). Via the separate normative channel, we incorporated 9 formal protocol specifications (6 IETF RFCs, OpenID Connect Core 1.0, NIST SP 800-63B-4, and W3C WebAuthn Level 3) alongside the PRISMA 2020 reporting guideline~\cite{page2021prisma}, forming the complete cited bibliography of $N = 40$ authoritative sources.
+
+\subsection{Epistemic Demarcation and Methodological Rigor}
+To uphold peer-review transparency, this manuscript enforces explicit epistemic boundaries across all sections. Empirical figures drawn from prior studies cite their original experimental context. Normative requirements cite IETF, OpenID Foundation, NIST, and W3C specifications without unstated extensions. Analytical bounds are cross-checked against a reproducible 500-trial Python Monte Carlo simulation (fixed PRNG seed \texttt{2026}) modeling a rational consistent adversary; the complete source code and LaTeX manuscript are publicly archived at \url{https://github.com/casousavng/bc-mfa-oidc}. Finally, JSON token listings are synthetic pedagogical artifacts conforming to OpenID Connect Core 1.0, RFC 8176, and RFC 9449 schemas.
